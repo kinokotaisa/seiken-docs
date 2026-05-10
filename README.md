@@ -60,8 +60,8 @@
 | ドキュメント | 説明 | 最終更新 |
 | :--- | :--- | :--- |
 | [system-overview.md](./system-overview.md) | システム全体構成・セットアップ手順 | 2025/11/10 |
-| [api-spec.md](./api-spec.md) | REST API・Socket.IO イベント仕様 | 2025/09/15 |
-| [backend.md](./backend.md) | バックエンド設計仕様 | 2025/09/15 |
+| [api-spec.md](./api-spec.md) | REST API・Socket.IO イベント仕様 | 2026/05/11 |
+| [backend.md](./backend.md) | バックエンド設計仕様 | 2026/05/11 |
 | [frontend.md](./frontend.md) | フロントエンド設計仕様 | 2025/09/29 |
 | [rpi-client.md](./rpi-client.md) | Raspberry Pi クライアント設計仕様 | 2025/09/01 |
 
