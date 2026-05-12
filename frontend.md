@@ -124,7 +124,7 @@ src/
 - **ライフサイクル**:
   - `onMounted`:
     1. `vue-router` からURLパラメータ（`deviceId`）を取得する。
-    2. `axios` を使い `/api/devices/{deviceId}` からデバイスの初期データを取得する。
+    2. `axios` を直接使用して `/api/devices/{deviceId}` を呼び出す。
     3. `socketService` でサーバーに接続し、`deviceId` をペイロードに含めて `browser:join_room` イベントを送信する。
     4. `update:stats`、`stream:frame`、`update:status` イベントのリスナーを登録する。
   - `onUnmounted`: `socketService.disconnect()` を呼び出しサーバーとの接続をクリーンに切断する。
@@ -147,7 +147,6 @@ src/
   3. サーバーから返された、デバイスIDをキーとするデータオブジェクトを受け取る。
   4. 全データセットに共通する日付ラベルのリストを生成する。
   5. 各デバイスのデータを `vue-chartjs` が要求する複数データセットの形式に整形し、`chartData` を更新してグラフを再描画する。
-- **スタイル**: メディアクエリ（`max-width: 768px`）を適用。画面が狭い場合、コントロール要素のレイアウトを調整しグラフの視認性を確保する。
 
 ---
 
