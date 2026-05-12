@@ -90,7 +90,6 @@ graph TD
 | **OpenCV-Python** | 画像認識 | `picamera2` から受け取った映像を解析し、背景差分法で物体の動きを検出・カウントするための事実上の標準ライブラリ |
 | **gpiozero** | ハードウェア制御 | Raspberry Pi 5に公式対応した新しいGPIO制御ライブラリ。`RPi.GPIO` よりも高レベルで直感的なAPIを提供し、コードの可読性が高いため |
 | **python-socketio** | リアルタイム通信 | バックエンドサーバーとのWebSocket通信を行い、イベントベースの双方向通信を容易に実装できるため。自動再接続機能も備えている |
-| **eventlet** | ネットワークライブラリ | `python-socketio` が内部で使用する高性能な非同期ネットワークライブラリ |
 
 ---
 
@@ -106,8 +105,10 @@ sequenceDiagram
 
   RPi->>+Server: 接続要求 (connect)
   Server-->>-RPi: 接続確立
-  RPi->>Server: デバイス登録 (device:register)
-  Note over Server: ラズパイを部屋に参加させる
+  loop config.DEVICESの各デバイス
+    RPi->>Server: デバイス登録 (device:register)
+  end
+  Note over Server: 各デバイスを部屋に参加させる
   Server->>RPi: 最新のROI設定を送信 (config:update)
 
   loop 映像解析ループ (バックグラウンド実行)
@@ -139,7 +140,12 @@ sequenceDiagram
 | `DEVICES` | dict | キーに `deviceId`、値にハードウェア情報（`pin` 番号、`name`）を持つ |
 | `CAMERAS` | list | 使用するカメラ（`index`）と監視範囲（`rois`）のリスト |
 | `SERVER_URL` | str | 接続先バックエンドサーバーのURL |
+| `RASPBERRY_PI_ID` | str | このラズパイを識別するID |
+| `CAMERA_RESOLUTION_WIDTH` | int | カメラ映像の横解像度（ピクセル） |
+| `CAMERA_RESOLUTION_HEIGHT` | int | カメラ映像の縦解像度（ピクセル） |
+| `CAMERA_FRAMERATE` | int | カメラのフレームレート（fps） |
 | `PUNCH_DETECTION_THRESHOLD` | int | パンチとして認識する動きの最小面積（ピクセル数） |
+| `CAMERA_WARMUP_FRAMES` | int | 起動直後に背景学習に専念するフレーム数。この間はパンチ検出を行わない |
 | `ENABLE_LOCAL_PREVIEW` | bool | デバッグ用プレビューウィンドウ表示の制御フラグ |
 
 ### 6.2. `hardware_controller.py`
@@ -151,7 +157,7 @@ sequenceDiagram
 | :---- | :---- |
 | `__init__(self, device_configs)` | `config.DEVICES` 辞書を受け取り、初期化する |
 | `setup(self)` | `device_configs` に基づき、全GPIOピンを `gpiozero.OutputDevice` として初期化する |
-| `trigger_punch(self, device_id)` | 指定した `device_id` に対応するピンにLOWパルスを送信し、AVRマイコンをトリガーする |
+| `trigger_punch(self, device_id, duration=0.1)` | 指定した `device_id` に対応するピンにLOWパルスを送信し、AVRマイコンをトリガーする。`duration` でパルス幅（秒）を指定できる |
 | `cleanup(self)` | `close()` を呼び出し、使用した全GPIOピンを安全に解放する |
 
 ### 6.3. `vision_analyzer.py`
@@ -177,7 +183,7 @@ sequenceDiagram
 | `start(self)` | サーバーへの接続を開始する。失敗した場合は5秒後に再試行を繰り返す |
 | `stop(self)` | サーバーから切断する |
 | `send_punch_log(self, device_id, count)` | パンチログを `device:log_punch` イベントでサーバーに送信する |
-| `send_frame_stream(self, camera_index, image_data)` | JPEGエンコードされた映像フレームを `stream:frame` イベントで送信する |
+| `send_frame_stream(self, device_id, image_data)` | JPEGエンコードされた映像フレームを `stream:frame` イベントで送信する |
 
 ### 6.5. `main.py`
 
@@ -190,7 +196,9 @@ sequenceDiagram
 | `run(self)` | `vision_analyzer` をバックグラウンドスレッドで起動し、メインスレッドで `network_client` の接続を開始する |
 | `stop(self)` | プログラム終了時に各モジュールのクリーンアップ処理を呼び出す |
 | `_on_punch_detected(self, ...)` | パンチ検出時のコールバック。`network_client` 経由でサーバーに通知する |
+| `_on_frame_stream(self, camera_index, image_data)` | 映像フレーム受信時のコールバック。カメラインデックスに対応する全デバイスに `network_client` 経由でフレームを送信する |
 | `_on_remote_command(self, ...)` | 遠隔操作命令受信時のコールバック。`hardware_controller` 経由で人形を動かす |
+| `_on_config_update(self, data)` | ROI設定更新命令受信時のコールバック。`vision_analyzer` に新しいROI設定を反映する |
 
 ---
 
@@ -276,12 +284,14 @@ sudo nano /etc/systemd/system/seiken-client.service
 ```ini
 [Unit]
 Description=Seiken Puncher Client Application
-After=network.target
+After=network-online.target seiken-server.service
+BindsTo=seiken-server.service
 
 [Service]
 Type=simple
 User=kinokotaisa
 WorkingDirectory=/home/kinokotaisa/python/seiken_gen2
+Environment=PYTHONUNBUFFERED=1
 ExecStart=/home/kinokotaisa/opencv/bin/python3 /home/kinokotaisa/python/seiken_gen2/main.py
 Restart=on-failure
 
